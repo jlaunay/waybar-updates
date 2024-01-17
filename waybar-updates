@@ -6,6 +6,7 @@ usage() {
     -c, --cycles           Cycles between online checks (e.g. 6s * 600 cycles = 3600s = 1h between online checks)
     -l, --packages-limit   Maximum number of packages to be shown in notifications and tooltip
     -d, --devel            Enable check for development packages update
+    -s, --second           Use it for a second instance
     -n, --news [(opt) all] Print new news from the Arch Linux homepage.
                            News is considered new if it is newer than the build date of all native packages.
                            Run with --news all to print all news regardless of the publication date."
@@ -19,7 +20,7 @@ devel=false
 news=false
 allnews=false
 
-PARSED_ARGUMENTS=$(getopt -o "hi:c:l:d::n::" --long "help,interval,cycles,packages-limit,devel::,news::" --name "waybar-updates" -- "$@")
+PARSED_ARGUMENTS=$(getopt -o "hi:c:l:d::n::s::" --long "help,interval,cycles,packages-limit,devel::,news::,second::" --name "waybar-updates" -- "$@")
 eval set -- "$PARSED_ARGUMENTS"
 while :; do
   case "$1" in
@@ -37,6 +38,10 @@ while :; do
     ;;
   -d | --devel)
     devel=true
+    shift 2
+    ;;
+  -s | --second)
+    second=true
     shift 2
     ;;
   -n | --news)
@@ -243,7 +248,18 @@ function cleanup() {
   echo "Cleaning up..."
   rm -f "$tmp_aur_packages_file"
   rm -f "$tmp_devel_packages_file"
+  rm -f "/tmp/waybJson"
   exit 0
+}
+
+function second_instance() {
+  while true; do
+      if [ -e "/tmp/waybJson" ]; then
+          cat "/tmp/waybJson"
+      fi
+
+      sleep 1
+  done
 }
 
 # sync at the first start
@@ -259,6 +275,7 @@ trap cleanup SIGINT SIGTERM
 
 # check updates every 6 seconds
 while true; do
+  if [ $second== true ];then second_instance; fi
   previous_pacman_updates_checksum=$pacman_updates_checksum
   previous_aur_updates_checksum=$aur_updates_checksum
   if [ $devel == true ];then previous_devel_updates_checksum=$devel_updates_checksum; fi
@@ -329,9 +346,9 @@ while true; do
     fi
   fi
   if [ "$total_updates_count" -gt 0 ]; then
-    json $total_updates_count "pending-updates" "$(echo -e "$tooltip" | head -n "$packages_limit")" "pending-updates"
+    json $total_updates_count "pending-updates" "$(echo -e "$tooltip" | head -n "$packages_limit")" "pending-updates" | tee /tmp/waybJson
   else
-    json "" "updated" "$(gettext "waybar-updates" "System is up to date")" "updated"
+    json "" "updated" "$(gettext "waybar-updates" "System is up to date")" "updated" | tee /tmp/waybJson
   fi
 
   sleep "$interval"
